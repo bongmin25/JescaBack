@@ -1,6 +1,7 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
+import nodemailer from "nodemailer"; // Importar Nodemailer
 
 // Cargamos las variables de entorno
 dotenv.config();
@@ -20,6 +21,17 @@ const port = 3000;
 // Variables en memoria para evitar duplicados y almacenar notificaciones (solo para pruebas locales)
 const processedPayments = new Set();
 const notificationsLog = [];
+
+// Configurar transporte de Nodemailer
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com", // Configuración específica del host de Gmail
+  port: 465, // Puerto seguro para SMTP
+  secure: true, // Asegura que se utiliza SSL/TLS
+  auth: {
+    user: process.env.EMAIL_USER, // Tu dirección de correo electrónico
+    pass: process.env.EMAIL_PASSWORD, // Tu contraseña de aplicaciones
+  },
+});
 
 app.use(cors());
 app.use(express.json());
@@ -68,12 +80,10 @@ app.post("/create_preference", async (req, res) => {
   }
 });
 
-// Procesar notificación de pago
 app.post("/", async (req, res) => {
   try {
     const notification = req.body;
 
-    // Guardar la notificación para auditoría
     notificationsLog.push(notification);
     console.log("Notificación recibida y almacenada:", notification);
 
@@ -84,39 +94,54 @@ app.post("/", async (req, res) => {
       return res.status(400).send("ID de pago no proporcionado.");
     }
 
-    // Evitar procesar notificaciones duplicadas
+    // Verificar si ya fue procesado
     if (processedPayments.has(paymentId)) {
       console.log("El ID de pago ya fue procesado:", paymentId);
       return res.status(200).send("Notificación duplicada ignorada.");
     }
 
-    // Marcar el pago como procesado
     processedPayments.add(paymentId);
 
     // Obtener detalles del pago desde MercadoPago
     const response = await payment.get({ id: paymentId });
 
+    // Verificar que la respuesta sea válida
     if (response.status !== 200) {
-      console.error("Error al verificar el pago:", response.data || response);
+      console.error("Error al verificar el pago, status no 200:", response);
       return res.status(500).send("Error al verificar el pago.");
     }
 
+    console.log("Detalles del pago verificado:", response.body);
     const paymentDetails = response.body;
 
-    // Manejar el pago según su estado
+    // Asegurarse de que el pago esté aprobado antes de continuar
     if (paymentDetails.status === "approved") {
       console.log("Pago aprobado:", paymentDetails);
-      // Aquí puedes agregar lógica para guardar la información del pago en tu base de datos
+
+      // Enviar correo con los detalles del pago
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: process.env.NOTIFICATION_EMAIL,
+        subject: "Nuevo pago aprobado",
+        text: `Detalles del pago:
+        - Nombre: ${paymentDetails.payer?.name || "Desconocido"}
+        - Email: ${paymentDetails.payer?.email || "No proporcionado"}
+        - Monto: ${paymentDetails.transaction_amount}
+        - Fecha: ${paymentDetails.date_approved}
+        `,
+      };
+
+      // Enviar correo y confirmar
+      console.log("Enviando correo...");
+      await transporter.sendMail(mailOptions);
+      console.log("Correo enviado correctamente.");
     } else {
       console.log("El pago no fue aprobado. Estado:", paymentDetails.status);
     }
 
     res.sendStatus(200);
   } catch (error) {
-    console.error(
-      "Error procesando la notificación:",
-      error.response?.data || error.message
-    );
+    console.error("Error procesando la notificación:", error.message || error);
     res.status(500).send("Error procesando la notificación.");
   }
 });
