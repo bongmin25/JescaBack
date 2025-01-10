@@ -109,8 +109,8 @@ app.post("/", async (req, res) => {
 
       // Configurar correo con SendGrid
       const msg = {
-        to: "jesca.clothes@gmail.com", // Cambia a tu destinatario
-        from: "tom.dantas25@gmail.com", // Cambia a tu remitente
+        to: "tom.dantas25@gmail.com", 
+        from: "tom.dantas25@gmail.com", 
         subject: "Nuevo pago aprobado",
         text: `Detalles del pago:
         - Nombre: ${paymentDetails.payer?.name || "Desconocido"}
