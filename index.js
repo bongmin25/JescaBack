@@ -1,22 +1,19 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import sgMail from "@sendgrid/mail";
-import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
+import nodemailer from "nodemailer"; // Importar Nodemailer
 
-// Configurar variables de entorno
+// Cargamos las variables de entorno
 dotenv.config();
 
-// Configurar SendGrid API Key
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 
-// Configurar MercadoPago
+// Configuramos MercadoPago
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN,
 });
 
 const payment = new Payment(client);
-const preference = new Preference(client);
 
 const app = express();
 const port = 3000;
@@ -24,6 +21,17 @@ const port = 3000;
 // Variables en memoria para evitar duplicados y almacenar notificaciones (solo para pruebas locales)
 const processedPayments = new Set();
 const notificationsLog = [];
+
+// Configurar transporte de Nodemailer
+const transporter = nodemailer.createTransport({
+  host: "smtp.gmail.com", // Configuración específica del host de Gmail
+  port: 465, // Puerto seguro para SMTP
+  secure: true, // Asegura que se utiliza SSL/TLS
+  auth: {
+    user: process.env.EMAIL_USER, // Tu dirección de correo electrónico
+    pass: process.env.EMAIL_PASSWORD, // Tu contraseña de aplicaciones
+  },
+});
 
 app.use(cors());
 app.use(express.json());
@@ -50,13 +58,14 @@ app.post("/create_preference", async (req, res) => {
         currency_id: "ARS",
       })),
       back_urls: {
-        success: `http://localhost:3000/carrito?status=success`,
-        failure: `http://localhost:3000/carrito?status=failure`,
-        pending: `http://localhost:3000/carrito?status=pending`,
+        success: `http://localhost:3001/carrito?status=success`,
+        failure: `http://localhost:3001/carrito?status=failure`,
+        pending: `http://localhost:3001/carrito?status=pending`,
       },
       auto_return: "approved",
     };
 
+    const preference = new Preference(client);
     const result = await preference.create({ body });
 
     res.json({
@@ -71,7 +80,6 @@ app.post("/create_preference", async (req, res) => {
   }
 });
 
-// Procesar notificaciones de pago
 app.post("/", async (req, res) => {
   try {
     const notification = req.body;
@@ -97,20 +105,23 @@ app.post("/", async (req, res) => {
     // Obtener detalles del pago desde MercadoPago
     const response = await payment.get({ id: paymentId });
 
+    // Verificar que la respuesta sea válida
     if (response.status !== 200) {
       console.error("Error al verificar el pago, status no 200:", response);
       return res.status(500).send("Error al verificar el pago.");
     }
 
+    console.log("Detalles del pago verificado:", response.body);
     const paymentDetails = response.body;
 
+    // Asegurarse de que el pago esté aprobado antes de continuar
     if (paymentDetails.status === "approved") {
       console.log("Pago aprobado:", paymentDetails);
 
-      // Configurar correo con SendGrid
-      const msg = {
-        to: "jesca.clothes@gmail.com", // Cambia a tu destinatario
-        from: "tom.dantas25@gmail.com", // Cambia a tu remitente
+      // Enviar correo con los detalles del pago
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: process.env.NOTIFICATION_EMAIL,
         subject: "Nuevo pago aprobado",
         text: `Detalles del pago:
         - Nombre: ${paymentDetails.payer?.name || "Desconocido"}
@@ -120,10 +131,10 @@ app.post("/", async (req, res) => {
         `,
       };
 
-      // Enviar correo
-      console.log("Enviando correo con SendGrid...");
-      await sgMail.send(msg);
-      console.log("Correo enviado correctamente con SendGrid.");
+      // Enviar correo y confirmar
+      console.log("Enviando correo...");
+      await transporter.sendMail(mailOptions);
+      console.log("Correo enviado correctamente.");
     } else {
       console.log("El pago no fue aprobado. Estado:", paymentDetails.status);
     }
