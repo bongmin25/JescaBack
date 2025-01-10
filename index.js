@@ -1,14 +1,10 @@
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import sgMail from "@sendgrid/mail";
 import { MercadoPagoConfig, Payment, Preference } from "mercadopago";
 
 // Configurar variables de entorno
 dotenv.config();
-
-// Configurar SendGrid API Key
-sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
 // Configurar MercadoPago
 const client = new MercadoPagoConfig({
@@ -106,24 +102,6 @@ app.post("/", async (req, res) => {
 
     if (paymentDetails.status === "approved") {
       console.log("Pago aprobado:", paymentDetails);
-
-      // Configurar correo con SendGrid
-      const msg = {
-        to: "jesca.clothes@gmail.com", // Cambia a tu destinatario
-        from: "tom.dantas25@gmail.com", // Cambia a tu remitente
-        subject: "Nuevo pago aprobado",
-        text: `Detalles del pago:
-        - Nombre: ${paymentDetails.payer?.name || "Desconocido"}
-        - Email: ${paymentDetails.payer?.email || "No proporcionado"}
-        - Monto: ${paymentDetails.transaction_amount}
-        - Fecha: ${paymentDetails.date_approved}
-        `,
-      };
-
-      // Enviar correo
-      console.log("Enviando correo con SendGrid...");
-      await sgMail.send(msg);
-      console.log("Correo enviado correctamente con SendGrid.");
     } else {
       console.log("El pago no fue aprobado. Estado:", paymentDetails.status);
     }
