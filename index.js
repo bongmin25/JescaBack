@@ -46,9 +46,9 @@ app.post("/create_preference", async (req, res) => {
         currency_id: "ARS",
       })),
       back_urls: {
-        success: `http://localhost:3001/carrito?status=success`,
-        failure: `http://localhost:3001/carrito?status=failure`,
-        pending: `http://localhost:3001/carrito?status=pending`,
+        success: `${process.env.FRONTEND_URL}/carrito?status=success`,
+        failure: `${process.env.FRONTEND_URL}/carrito?status=failure`,
+        pending: `${process.env.FRONTEND_URL}/carrito?status=pending`,
       },
       auto_return: "approved",
     };
